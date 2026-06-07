@@ -292,7 +292,7 @@ async def _get_bing_auth_params() -> tuple[str, str, str, str, str] | tuple[None
     ig_match = re.search(r'IG:"([^"]+)"', html)
     abuse_match = re.search(r'params_AbusePreventionHelper\s*=\s*\[(\d+),"([^"]+)",(\d+)\]', html)
     path_match = re.search(r'params_RichTranslate\s*=\s*\["([^"]+)"', html)
-    iid_match = re.search(r'translator\.(\d+)', html)
+    iid_match = re.search(r"translator\.(\d+)", html)
     if not ig_match or not abuse_match:
         return None, "Bing Translator 页面参数提取失败"
 

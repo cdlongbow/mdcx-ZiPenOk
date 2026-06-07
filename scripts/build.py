@@ -212,9 +212,7 @@ class BuildManager:
         # 验证构建结果
         if self.is_windows:
             app_path = (
-                Path(f"dist/{self.app_name}.exe")
-                if self.onefile
-                else Path(f"dist/{self.app_name}/{self.app_name}.exe")
+                Path(f"dist/{self.app_name}.exe") if self.onefile else Path(f"dist/{self.app_name}/{self.app_name}.exe")
             )
         elif self.is_mac:
             app_path = Path(f"dist/{self.app_name}.app")
@@ -336,7 +334,9 @@ def main():
     parser.add_argument("--no-color", action="store_true", help="禁用颜色输出")
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("--onedir", action="store_true", help="Windows/Linux 使用目录模式打包（本地测试默认）")
-    mode_group.add_argument("--onefile", action="store_true", help="Windows/Linux 使用单文件模式打包（Release 默认产物）")
+    mode_group.add_argument(
+        "--onefile", action="store_true", help="Windows/Linux 使用单文件模式打包（Release 默认产物）"
+    )
     args = parser.parse_args()
 
     if args.no_color:
