@@ -420,8 +420,14 @@ class MyMAinWindow(QMainWindow):
                     child_geo.height(),
                 )
 
-        self.Ui.label_60.setText("填写 DeepL API / DeepLX URL / 百度 API 凭据后，才会生效；未填写时会自动跳过。")
-        self.Ui.label_601.setText("填写 DeepL API / DeepLX URL / 百度 API 凭据后，才会生效；未填写时会自动跳过。")
+        self.Ui.label_60.setText("Bing/Google 无需配置；填写 DeepL API / DeepLX URL / 百度 API 凭据后，对应服务才会生效。")
+        self.Ui.label_601.setText("Bing/Google 无需配置；填写 DeepL API / DeepLX URL / 百度 API 凭据后，对应服务才会生效。")
+
+        self.Ui.checkBox_bing = QCheckBox(self.Ui.layoutWidget_2)
+        self.Ui.checkBox_bing.setMinimumSize(self.Ui.checkBox_google.minimumSize())
+        self.Ui.checkBox_bing.setObjectName("checkBox_bing")
+        self.Ui.checkBox_bing.setText("Bing")
+        self.Ui.horizontalLayout_20.insertWidget(1, self.Ui.checkBox_bing)
 
         self.Ui.checkBox_baidu = QCheckBox(self.Ui.layoutWidget_2)
         self.Ui.checkBox_baidu.setMinimumSize(self.Ui.checkBox_google.minimumSize())

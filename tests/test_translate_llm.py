@@ -45,6 +45,54 @@ def test_config_update_ignores_legacy_youdao_translator():
     assert data["translate_config"]["translate_by"] == ["google", "baidu"]
 
 
+def test_config_accepts_bing_translator():
+    config = Config.model_validate({"translate_config": {"translate_by": ["bing"]}})
+
+    assert config.translate_config.translate_by == [Translator.BING]
+
+
+def test_get_bing_target_language():
+    from mdcx.base.translate import get_bing_target_language
+
+    assert get_bing_target_language(Language.ZH_CN) == "zh-Hans"
+    assert get_bing_target_language(Language.ZH_TW) == "zh-Hant"
+    assert get_bing_target_language(Language.EN) == "en"
+    assert get_bing_target_language(Language.JP) == "ja"
+
+
+def test_extract_bing_translation():
+    from mdcx.base.translate import _extract_bing_translation
+
+    response = [{"translations": [{"text": "你好", "to": "zh-Hans"}]}]
+
+    assert _extract_bing_translation(response) == "你好"
+
+
+@pytest.mark.asyncio
+async def test_translate_with_engine_uses_bing(monkeypatch: pytest.MonkeyPatch):
+    from mdcx.base import translate as base_translate
+
+    async def fake_bing_translate(title, outline, title_target_lang, outline_target_lang):
+        assert title_target_lang == "zh-Hans"
+        assert outline_target_lang == "zh-Hant"
+        return f"CN::{title}", f"TW::{outline}", None
+
+    monkeypatch.setattr(base_translate, "bing_translate", fake_bing_translate)
+
+    result = await base_translate.translate_with_engine(
+        Translator.BING,
+        "Hello",
+        "World",
+        title_language=Language.ZH_CN,
+        outline_language=Language.ZH_TW,
+    )
+
+    assert result.success
+    assert result.engine == Translator.BING
+    assert result.title == "CN::Hello"
+    assert result.outline == "TW::World"
+
+
 @pytest.mark.asyncio
 async def test_llm_translate_uses_separate_prompts(monkeypatch: pytest.MonkeyPatch):
     from mdcx.base import translate as base_translate
