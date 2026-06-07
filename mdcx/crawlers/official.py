@@ -8,8 +8,15 @@ from ..config.enums import Website
 from ..config.manager import manager
 from ..number import get_number_letters
 from .base import BaseCrawler, Context, CralwerException, CrawlerData
+from .dahlia import DahliaCrawler
+from .faleno import FalenoCrawler
 from .official_uncensored import crawl_uncensored_official
 from .prestige import PrestigeCrawler
+
+OFFICIAL_CRAWLER_BY_PREFIX = {
+    "DLDSS": DahliaCrawler,
+    "FNS": FalenoCrawler,
+}
 
 DIRECTOR_PLACEHOLDER_CHARS = frozenset("-—－ー―‐~～·•. ")
 
@@ -127,7 +134,20 @@ class OfficialCrawler(BaseCrawler):
             ctx.debug("official uncensored data success")
             return result
 
-        official_url = manager.computed.official_websites.get(get_number_letters(number))
+        number_letters = get_number_letters(number)
+        official_crawler_cls = OFFICIAL_CRAWLER_BY_PREFIX.get(number_letters.upper())
+        if official_crawler_cls is not None:
+            child_response = await official_crawler_cls(client=self.async_client).run(ctx.input)
+            ctx.debug_info.logs.extend(child_response.debug_info.logs)
+            ctx.debug_info.search_urls = child_response.debug_info.search_urls
+            ctx.debug_info.detail_urls = child_response.debug_info.detail_urls
+            if child_response.debug_info.error is not None:
+                raise child_response.debug_info.error
+            if child_response.data is None:
+                raise CralwerException("官网子爬虫未返回数据")
+            return child_response.data
+
+        official_url = manager.computed.official_websites.get(number_letters)
         if not official_url:
             raise CralwerException("不在官网番号前缀列表中")
         if official_url == "https://www.prestige-av.com":

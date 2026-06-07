@@ -42,6 +42,21 @@ class FakeUncensoredOfficialClient:
         return None, f"unexpected url: {url}"
 
 
+class FakeMappedOfficialClient:
+    def __init__(self):
+        self.calls = []
+
+    async def get_text(self, url, **kwargs):
+        self.calls.append(url)
+        if url == "https://faleno.jp/top/?s=fns 216":
+            return _faleno_search_html(), ""
+        if url == "https://faleno.jp/top/works/fns216/":
+            return _faleno_detail_html(), ""
+        if url == "https://dahlia-av.jp/works/dldss517/":
+            return _dahlia_detail_html(), ""
+        return None, f"unexpected url: {url}"
+
+
 def _detail_html() -> str:
     return """
     <html>
@@ -61,6 +76,58 @@ def _detail_html() -> str:
         <div class="video"><video src="https://example.test/trailer.mp4"></video></div>
       </body>
     </html>
+    """
+
+
+def _faleno_search_html() -> str:
+    return """
+    <html><body>
+      <div class="text_name">
+        <a href="https://faleno.jp/top/works/fns216/">FNS-216</a>
+      </div>
+      <a><img src="https://example.test/fns216-search.jpg"></a>
+    </body></html>
+    """
+
+
+def _faleno_detail_html() -> str:
+    return """
+    <html><body>
+      <h1>Faleno Official Title Actor F</h1>
+      <div class="box_works01_text"><p>Faleno outline</p></div>
+      <div class="box_works01_list">
+        <ul>
+          <li class="clearfix"><span>鍑烘紨濂冲劒</span><p>Actor F</p></li>
+          <li class="clearfix"><span>鍙庨尣鏅傞枔</span><p>115鍒?/p></li>
+          <li class="clearfix"><span>鐧哄２鏃?/span><p>2026/04/09</p></li>
+          <li class="clearfix"><span>銉°兗銈兗</span><p>FALENO</p></li>
+        </ul>
+      </div>
+      <a class="pop_sample" href="https://example.test/fns216.mp4">
+        <img src="https://example.test/fns216_1200.jpg?output-quality=60">
+      </a>
+      <a class="pop_img" href="https://example.test/fns216-extra.jpg"></a>
+      <a class="genre">Drama</a>
+    </body></html>
+    """
+
+
+def _dahlia_detail_html() -> str:
+    return """
+    <html><body>
+      <h1>Dahlia Official Title Actor D</h1>
+      <div class="box_works01_text"><p>Dahlia outline</p></div>
+      <div class="box_works01_list clearfix">
+        <div><span>鍑烘紨濂冲劒</span><p>Actor D</p></div>
+        <span>鍙庨尣鏅傞枔</span><p>118鍒?/p>
+        <span>銉°兗銈兗</span><p>DAHLIA</p>
+      </div>
+      <div class="view_timer"><span>閰嶄俊闁嬪鏃?/span><p>2026/04/10</p></div>
+      <a class="pop_sample" href="https://example.test/dldss517.mp4">
+        <img src="https://example.test/dldss517_1200.jpg?output-quality=60">
+      </a>
+      <a class="pop_img" href="https://example.test/dldss517-extra.jpg"></a>
+    </body></html>
     """
 
 
@@ -199,6 +266,30 @@ async def test_official_crawler_uses_prefix_mapping_and_dynamic_source():
     assert res.data.poster == "https://example.test/poster.jpg"
     assert res.data.extrafanart == ["https://example.test/extra.jpg"]
     assert res.data.trailer == "https://example.test/trailer.mp4"
+
+
+@pytest.mark.parametrize(
+    ("number", "expected_source", "expected_detail_url", "expected_title"),
+    [
+        ("FNS-216", "faleno", "https://faleno.jp/top/works/fns216/", "Faleno Official Title Actor F"),
+        ("DLDSS-517", "dahlia", "https://dahlia-av.jp/works/dldss517/", "Dahlia Official Title Actor D"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_official_crawler_routes_mapped_prefixes_to_site_crawlers(
+    number, expected_source, expected_detail_url, expected_title
+):
+    client = FakeMappedOfficialClient()
+    crawler = OfficialCrawler(client=client)
+
+    res = await crawler.run(_input(number))
+
+    assert res.debug_info.error is None
+    assert res.data is not None
+    assert res.data.source == expected_source
+    assert res.data.number == number
+    assert res.data.title == expected_title
+    assert res.data.external_id == expected_detail_url
 
 
 @pytest.mark.parametrize(
