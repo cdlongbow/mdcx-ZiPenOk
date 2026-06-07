@@ -55,7 +55,7 @@ def get_version_from_config() -> str:
 
 
 class BuildManager:
-    def __init__(self, app_name: str, app_version: str, create_dmg: bool, debug: bool):
+    def __init__(self, app_name: str, app_version: str, create_dmg: bool, debug: bool, onefile: bool):
         self.app_name = app_name
         self.app_version = app_version
         self.create_dmg = create_dmg
@@ -65,6 +65,7 @@ class BuildManager:
         self.is_windows = self.os == "Windows"
         self.is_linux = self.os == "Linux"
         self.debug = debug
+        self.onefile = onefile
 
     def run(self):
         """运行构建流程"""
@@ -142,8 +143,8 @@ class BuildManager:
             self.app_name,
             "--noupx",
             *(["--osx-bundle-identifier", "com.mdcuniverse.mdcx"] * self.is_mac),
-            # 使用 onedir（目录模式）代替 onefile，避免每次启动解压 ~150MB 到临时目录
-            *(["--onedir"] if not self.is_mac else []),
+            # 默认使用 onedir 加快本地启动；Release workflow 显式传入 --onefile。
+            *(["--onefile" if self.onefile else "--onedir"] if not self.is_mac else []),
             "-w",
             "main.py",
             "-p",
@@ -210,8 +211,11 @@ class BuildManager:
 
         # 验证构建结果
         if self.is_windows:
-            # onedir 模式下 exe 在子目录中
-            app_path = Path(f"dist/{self.app_name}/{self.app_name}.exe")
+            app_path = (
+                Path(f"dist/{self.app_name}.exe")
+                if self.onefile
+                else Path(f"dist/{self.app_name}/{self.app_name}.exe")
+            )
         elif self.is_mac:
             app_path = Path(f"dist/{self.app_name}.app")
         else:
@@ -330,6 +334,9 @@ def main():
     parser.add_argument("--create-dmg", "--dmg", action="store_true", help="创建 DMG 文件 (仅macOS)")
     parser.add_argument("--debug", action="store_true", help="启用调试模式")
     parser.add_argument("--no-color", action="store_true", help="禁用颜色输出")
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("--onedir", action="store_true", help="Windows/Linux 使用目录模式打包（本地测试默认）")
+    mode_group.add_argument("--onefile", action="store_true", help="Windows/Linux 使用单文件模式打包（Release 默认产物）")
     args = parser.parse_args()
 
     if args.no_color:
@@ -338,7 +345,11 @@ def main():
         logger.setLevel(logging.DEBUG)
 
     manager = BuildManager(
-        app_name=args.app_name, app_version=args.version, create_dmg=args.create_dmg, debug=args.debug
+        app_name=args.app_name,
+        app_version=args.version,
+        create_dmg=args.create_dmg,
+        debug=args.debug,
+        onefile=args.onefile,
     )
     manager.run()
 
