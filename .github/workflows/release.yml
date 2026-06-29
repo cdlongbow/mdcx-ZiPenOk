@@ -32,6 +32,7 @@ jobs:
           items=()
           items+=('{"build": "macos", "os": "macos-latest", "arch": "aarch64"}')
           items+=('{"build": "windows", "os": "windows-2022", "arch": "x86_64"}')
+          items+=('{"build": "linux", "os": "ubuntu-22.04", "arch": "x86_64"}')
 
           matrix="matrix=["
           for ((i=0; i<${#items[@]}; i++)); do
@@ -68,6 +69,28 @@ jobs:
         with:
           activate-environment: true
 
+      - name: Install Linux runtime libraries
+        if: ${{ matrix.build == 'linux' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libatk1.0-0 \
+            libcairo-gobject2 \
+            libcairo2 \
+            libegl1 \
+            libgdk-pixbuf-2.0-0 \
+            libgl1 \
+            libgtk-3-0 \
+            libharfbuzz0b \
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libtiff5 \
+            libxkbcommon-x11-0 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-keysyms1 \
+            xdg-utils
+
       - name: Set up Python environment
         run: uv sync --locked --all-extras --dev
 
@@ -85,6 +108,14 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: uv run scripts/build.py --debug --onefile
+
+      - name: Build Linux app
+        if: ${{ matrix.build == 'linux' }}
+        run: uv run scripts/build.py --debug --onedir
+
+      - name: Create Linux archive
+        if: ${{ matrix.build == 'linux' }}
+        run: tar -C dist -czf dist/MDCx-linux-${{ matrix.arch }}.tar.gz MDCx
 
       - name: Get changelog
         id: get-changelog
@@ -133,6 +164,17 @@ jobs:
           overwrite: true
           asset_name: MDCx-$tag-${{ matrix.build }}-${{ matrix.arch }}${{ matrix.tail }}-${{ github.sha }}.exe
           file: dist/MDCx.exe
+          prerelease: ${{ steps.release-type.outputs.prerelease }}
+          body: ${{ steps.get-changelog.outputs.CHANGELOG }}
+          tag: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Create Release - Linux
+        uses: svenstaro/upload-release-action@v2
+        if: ${{ matrix.build == 'linux' }}
+        with:
+          overwrite: true
+          asset_name: MDCx-$tag-${{ matrix.build }}-${{ matrix.arch }}-${{ github.sha }}.tar.gz
+          file: dist/MDCx-linux-${{ matrix.arch }}.tar.gz
           prerelease: ${{ steps.release-type.outputs.prerelease }}
           body: ${{ steps.get-changelog.outputs.CHANGELOG }}
           tag: ${{ github.event.inputs.tag || github.ref }}
