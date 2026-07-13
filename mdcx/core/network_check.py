@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus, urlencode, urljoin
 
 from mdcx.config.enums import Website
 
@@ -345,14 +345,19 @@ async def _build_site_specs() -> list[NetworkCheckSpec]:
         elif site == Website.MGSTAGE:
             cookies["adc"] = "1"
         elif site == Website.JAVDBAPI:
-            url = f"{url.rstrip('/')}/movies?q=ssni-200"
+            url = (
+                f"{url.rstrip('/')}/v2/search?"
+                f"{urlencode({'q': 'ssni-200', 'page': 1, 'type': 'movie', 'limit': 1, 'movie_type': 'all', 'from_recent': 'false', 'movie_filter_by': 'all', 'movie_sort_by': 'relevance'})}"
+            )
+            app_headers = getattr(crawler_cls, "app_headers", None)
+            headers = app_headers() if callable(app_headers) else {"Accept": "application/json"}
             specs.append(
                 NetworkCheckSpec(
                     name=site.value,
                     group="账号/API",
                     url=url,
                     site=site,
-                    headers={"Accept": "application/json"},
+                    headers=headers,
                     validator="javdbapi",
                 )
             )
@@ -592,7 +597,9 @@ def _classify_theporndb_token(status_code: int, text: str) -> tuple[NetworkCheck
 
 
 def _classify_javdbapi(status_code: int, text: str) -> tuple[NetworkCheckStatus, str]:
-    if status_code == 200 and ("universal_id" in text or "SSNI" in text.upper()):
+    if status_code == 200 and (
+        ("success" in text and "movies" in text) or "universal_id" in text or "SSNI" in text.upper()
+    ):
         return NetworkCheckStatus.OK, "API 查询正常"
     if status_code == 200:
         return NetworkCheckStatus.WARNING, "API 可访问，但 ssni-200 查询返回数据异常"

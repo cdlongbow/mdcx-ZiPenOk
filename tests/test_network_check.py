@@ -178,7 +178,11 @@ async def test_javdbapi_spec_uses_real_query_url(monkeypatch: pytest.MonkeyPatch
     class ApiCrawler:
         @classmethod
         def base_url_(cls):
-            return "https://api.thejavdb.net/v1"
+            return "https://jdforrepam.com/api"
+
+        @classmethod
+        def app_headers(cls):
+            return {"Accept": "application/json", "jdSignature": "test-signature"}
 
     fake_crawlers = SimpleNamespace(
         get_registered_crawler_sites=lambda include_hidden=False: [Website.JAVDBAPI],
@@ -189,7 +193,11 @@ async def test_javdbapi_spec_uses_real_query_url(monkeypatch: pytest.MonkeyPatch
     specs = await build_network_check_specs()
 
     javdbapi = next(spec for spec in specs if spec.site == Website.JAVDBAPI)
-    assert javdbapi.url == "https://api.thejavdb.net/v1/movies?q=ssni-200"
+    assert javdbapi.url == (
+        "https://jdforrepam.com/api/v2/search?"
+        "q=ssni-200&page=1&type=movie&limit=1&movie_type=all&from_recent=false&movie_filter_by=all&movie_sort_by=relevance"
+    )
+    assert javdbapi.headers == {"Accept": "application/json", "jdSignature": "test-signature"}
     assert javdbapi.validator == "javdbapi"
 
 
