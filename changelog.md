@@ -1,11 +1,11 @@
+## 220260713
+
 ## 新增
-- official 增加加勒比、HEYZO、一本道、Paco、10musume 等无码官网刮削支持。
-- official 增加 FNS/FALENO 与 DLDSS/DAHLIA 官网前缀路由。
-- 翻译设置增加 Bing Translator 选项。
+- fc2ppvdb/FC2CMADB 支持 Inertia deferred props 二次请求，可刮削详情页延迟加载的女優信息。
 
 ## 修复
-- iqqtv 清理标题末尾的 caribbeancom_番号 / 1pondo_番号 等站点前缀，避免污染无码标题。
+- 修复 FC2CMADB 初始详情页 `article.actresses` 为空时，FC2 影片无法获取演员的问题。
+- 修复启用「FC2 卖家作为演员」后覆盖已有女優名的问题；现在优先使用女優名，没有女優名时才用卖家兜底。
 
-## 调整
-- 升级检测、下载跳转与问题反馈地址改为 ZiPenOk/mdcx 仓库。
-- Windows 本地构建默认使用 onedir，Release workflow 继续使用 onefile 产物。
+## 验证
+- 已验证 `FC2-PPV-3577715` 可刮出演员 `白上咲花`，卖家保留为 studio/publisher。

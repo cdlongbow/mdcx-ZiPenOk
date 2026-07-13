@@ -107,6 +107,67 @@ class FakeFc2cmadbClient:
         return ArticleResponse(self.html_text), ""
 
 
+class FakeFc2cmadbDeferredClient:
+    def __init__(self):
+        self.partial_headers = None
+
+    async def request(self, method, url, **kwargs):
+        assert method == "GET"
+        assert url == "https://fc2cmadb.com/articles/3577715"
+
+        if kwargs.get("headers", {}).get("X-Inertia") == "true":
+            self.partial_headers = kwargs["headers"]
+
+            class DeferredResponse:
+                status_code = 200
+                headers = {"content-type": "application/json"}
+
+                def json(self):
+                    return {
+                        "component": "Articles/Show",
+                        "props": {
+                            "errors": {},
+                            "actresses": [{"id": 4742, "name": "白上咲花"}],
+                        },
+                    }
+
+            return DeferredResponse(), ""
+
+        class ArticleResponse:
+            status_code = 200
+            headers = {"content-type": "text/html; charset=UTF-8"}
+            text = """
+            <!DOCTYPE html>
+            <html>
+              <head><title inertia>FC2CMADB</title></head>
+              <body>
+                <script data-page="app" type="application/json">
+                  {
+                    "component": "Articles/Show",
+                    "version": "1ea6a727c46df7822430ec6d5b85321c",
+                    "props": {
+                      "article": {
+                        "title": "完全顔出し第1弾。清楚な美女のMちゃん",
+                        "video_id": 3577715,
+                        "censored": "無",
+                        "release_date": "2023-07-13",
+                        "duration": "01:01:00",
+                        "image_url": "/storage/images/article/no-image.jpg",
+                        "writer": {"name": "ひらめき無無剣"},
+                        "tags": [{"name": "ハメ撮り"}],
+                        "actresses": null
+                      }
+                    },
+                    "deferredProps": {"default": ["actresses"]}
+                  }
+                </script>
+              </body>
+            </html>
+            """
+
+        return ArticleResponse(), ""
+
+
 @pytest.mark.asyncio
 async def test_fc2ppvdb_crawler_uses_article_then_xhr(monkeypatch):
     monkeypatch.setattr(manager.config, "fields_rule", "")
@@ -162,6 +223,7 @@ async def test_fc2ppvdb_crawler_parses_fc2cmadb_article_html(monkeypatch):
         "熱くキツイ膣内に精液をぶちまける。"
     )
     assert res.data.actors == ["高瀬佳澄"]
+    assert res.data.all_actors == ["高瀬佳澄"]
     assert res.data.tags == ["ハメ撮り", "美乳", "中出し", "オリジナル", "美脚", "スレンダー", "口内発射", "美尻"]
     assert res.data.studio == "KING POWER D"
     assert res.data.publisher == "KING POWER D"
@@ -178,7 +240,36 @@ async def test_fc2ppvdb_crawler_parses_fc2cmadb_article_html(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fc2ppvdb_crawler_can_use_fc2cmadb_seller_as_actor(monkeypatch):
+async def test_fc2ppvdb_crawler_fetches_fc2cmadb_deferred_actresses(monkeypatch):
+    monkeypatch.setattr(manager.config, "fields_rule", "")
+    client = FakeFc2cmadbDeferredClient()
+    crawler = Fc2ppvdbCrawler(client=client)
+    res = await crawler.run(
+        CrawlerInput(
+            appoint_number="",
+            appoint_url="",
+            file_path=None,
+            mosaic="",
+            number="FC2-PPV-3577715",
+            short_number="FC2-PPV-3577715",
+            language=Language.UNDEFINED,
+            org_language=Language.UNDEFINED,
+        )
+    )
+
+    assert res.debug_info.error is None
+    assert res.data is not None
+    assert res.data.actors == ["白上咲花"]
+    assert res.data.all_actors == ["白上咲花"]
+    assert res.data.studio == "ひらめき無無剣"
+    assert client.partial_headers is not None
+    assert client.partial_headers["X-Inertia-Partial-Component"] == "Articles/Show"
+    assert client.partial_headers["X-Inertia-Partial-Data"] == "actresses"
+    assert client.partial_headers["X-Inertia-Version"] == "1ea6a727c46df7822430ec6d5b85321c"
+
+
+@pytest.mark.asyncio
+async def test_fc2ppvdb_crawler_prefers_fc2cmadb_actress_before_seller(monkeypatch):
     monkeypatch.setattr(manager.config, "fields_rule", [FieldRule.FC2_SELLER])
     crawler = Fc2ppvdbCrawler(client=FakeFc2cmadbClient(FC2CMADB_LEGACY_HTML))
     res = await crawler.run(
@@ -196,7 +287,32 @@ async def test_fc2ppvdb_crawler_can_use_fc2cmadb_seller_as_actor(monkeypatch):
 
     assert res.debug_info.error is None
     assert res.data is not None
+    assert res.data.actors == ["高瀬佳澄"]
+    assert res.data.all_actors == ["高瀬佳澄"]
+
+
+@pytest.mark.asyncio
+async def test_fc2ppvdb_crawler_uses_fc2cmadb_seller_when_actress_missing(monkeypatch):
+    monkeypatch.setattr(manager.config, "fields_rule", [FieldRule.FC2_SELLER])
+    html_without_actress = FC2CMADB_LEGACY_HTML.replace("      <tr><th>女優：</th><td>高瀬佳澄</td></tr>\n", "")
+    crawler = Fc2ppvdbCrawler(client=FakeFc2cmadbClient(html_without_actress))
+    res = await crawler.run(
+        CrawlerInput(
+            appoint_number="",
+            appoint_url="",
+            file_path=None,
+            mosaic="",
+            number="FC2-4930958",
+            short_number="FC2-4930958",
+            language=Language.UNDEFINED,
+            org_language=Language.UNDEFINED,
+        )
+    )
+
+    assert res.debug_info.error is None
+    assert res.data is not None
     assert res.data.actors == ["KING POWER D"]
+    assert res.data.all_actors == ["KING POWER D"]
 
 
 def test_fc2ppvdb_cookie_parser_accepts_cookie_without_spaces():

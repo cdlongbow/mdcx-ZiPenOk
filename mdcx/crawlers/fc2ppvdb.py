@@ -118,44 +118,56 @@ def list_names(values: Any) -> list[dict[str, str]]:
     return names
 
 
-def parse_fc2cmadb_inertia_html(html_text: str) -> dict[str, Any] | None:
+def extract_fc2cmadb_inertia_page(html_text: str) -> dict[str, Any] | None:
     doc = lxml_html.fromstring(html_text)
     for script_text in doc.xpath('//script[@data-page="app" and @type="application/json"]/text()'):
         try:
             page_data = json.loads(script_text)
         except (TypeError, json.JSONDecodeError):
             continue
-        props = page_data.get("props", {}) if isinstance(page_data, dict) else {}
-        article = props.get("article", {}) if isinstance(props, dict) else {}
-        if not isinstance(article, dict):
-            continue
-
-        title = clean_title(article.get("title", ""))
-        if not title or title == "FC2CMADB":
-            continue
-
-        writer = article.get("writer", {})
-        return {
-            "article": {
-                "title": title,
-                "image_url": absolute_url(FC2CMADB_BASE_URL, article.get("image_url", "")),
-                "release_date": clean_text(article.get("release_date", "")),
-                "actresses": list_names(article.get("actresses")),
-                "tags": list_names(article.get("tags")),
-                "writer": {"name": dict_name(writer)},
-                "censored": clean_text(article.get("censored", "")),
-                "duration": clean_text(article.get("duration", "")),
-                "video_id": clean_text(article.get("video_id", "")),
-            }
-        }
+        if isinstance(page_data, dict):
+            return page_data
     return None
+
+
+def parse_fc2cmadb_inertia_page(page_data: dict[str, Any], *, base_url: str) -> dict[str, Any] | None:
+    props = page_data.get("props", {}) if isinstance(page_data, dict) else {}
+    article = props.get("article", {}) if isinstance(props, dict) else {}
+    if not isinstance(article, dict):
+        return None
+
+    title = clean_title(article.get("title", ""))
+    if not title or title == "FC2CMADB":
+        return None
+
+    writer = article.get("writer", {})
+    return {
+        "article": {
+            "title": title,
+            "image_url": absolute_url(base_url, article.get("image_url", "")),
+            "release_date": clean_text(article.get("release_date", "")),
+            "actresses": list_names(article.get("actresses")),
+            "tags": list_names(article.get("tags")),
+            "writer": {"name": dict_name(writer)},
+            "censored": clean_text(article.get("censored", "")),
+            "duration": clean_text(article.get("duration", "")),
+            "video_id": clean_text(article.get("video_id", "")),
+        }
+    }
+
+
+def parse_fc2cmadb_inertia_html(html_text: str, *, base_url: str = FC2CMADB_BASE_URL) -> dict[str, Any] | None:
+    page_data = extract_fc2cmadb_inertia_page(html_text)
+    if page_data is None:
+        return None
+    return parse_fc2cmadb_inertia_page(page_data, base_url=base_url)
 
 
 def parse_fc2cmadb_html(html_text: str, *, base_url: str, number: str) -> dict[str, Any] | None:
     if not html_text or "FC2CMADB" not in html_text:
         return None
 
-    inertia_info = parse_fc2cmadb_inertia_html(html_text)
+    inertia_info = parse_fc2cmadb_inertia_html(html_text, base_url=base_url)
     if inertia_info is not None:
         return inertia_info
 
@@ -263,6 +275,92 @@ def response_text(response) -> str:
     return str(getattr(response, "text", "") or "")
 
 
+def has_inertia_deferred_prop(page_data: dict[str, Any] | None, prop_name: str) -> bool:
+    if not isinstance(page_data, dict):
+        return False
+
+    deferred_props = page_data.get("deferredProps")
+    if not isinstance(deferred_props, dict):
+        props = page_data.get("props", {})
+        deferred_props = props.get("deferredProps") if isinstance(props, dict) else None
+    if isinstance(deferred_props, dict):
+        groups = deferred_props.values()
+    elif isinstance(deferred_props, list):
+        groups = deferred_props
+    else:
+        return False
+
+    for group in groups:
+        if isinstance(group, str) and group == prop_name:
+            return True
+        if isinstance(group, list) and prop_name in group:
+            return True
+    return False
+
+
+def get_inertia_partial_headers(article_url: str, page_data: dict[str, Any], prop_name: str) -> dict[str, str]:
+    headers = {
+        "Accept": "text/html, application/xhtml+xml",
+        "Referer": article_url,
+        "X-Inertia": "true",
+        "X-Inertia-Partial-Data": prop_name,
+        "X-Requested-With": "XMLHttpRequest",
+    }
+
+    component = clean_text(page_data.get("component", ""))
+    if component:
+        headers["X-Inertia-Partial-Component"] = component
+    version = clean_text(page_data.get("version", ""))
+    if version:
+        headers["X-Inertia-Version"] = version
+    return headers
+
+
+def merge_fc2cmadb_deferred_props(html_info: dict[str, Any], props: dict[str, Any]) -> None:
+    article = html_info.get("article")
+    if not isinstance(article, dict) or not isinstance(props, dict):
+        return
+
+    actresses = props.get("actresses")
+    if not actresses and isinstance(props.get("article"), dict):
+        actresses = props["article"].get("actresses")
+    parsed_actresses = list_names(actresses)
+    if parsed_actresses:
+        article["actresses"] = parsed_actresses
+
+
+async def fetch_fc2cmadb_deferred_props(
+    async_client,
+    *,
+    article_url: str,
+    page_data: dict[str, Any],
+    prop_name: str,
+    cookies: dict[str, str],
+    use_proxy: bool,
+) -> tuple[dict[str, Any], str]:
+    response, error = await async_client.request(
+        "GET",
+        article_url,
+        headers=get_inertia_partial_headers(article_url, page_data, prop_name),
+        cookies=cookies,
+        use_proxy=use_proxy,
+    )
+    if response is None:
+        return {}, error
+    if response.status_code != 200:
+        return {}, f"deferred props 请求失败: HTTP {response.status_code}"
+    try:
+        data = response.json()
+    except Exception as exc:
+        return {}, describe_xhr_json_error(response, exc)
+    if not isinstance(data, dict):
+        return {}, f"deferred props 返回 JSON 结构异常: {type(data).__name__}"
+    props = data.get("props", {})
+    if not isinstance(props, dict):
+        return {}, f"deferred props 返回 props 结构异常: {type(props).__name__}"
+    return props, ""
+
+
 async def fetch_article_info(
     async_client,
     *,
@@ -314,8 +412,20 @@ async def fetch_article_info_with_warmup(
     if "/login" in final_url:
         return None, f"详情页跳转到登录页，fc2ppvdb Cookie 未生效: {final_url}"
 
-    html_info = parse_fc2cmadb_html(response_text(response_article), base_url=base_url, number=number)
+    article_html = response_text(response_article)
+    html_info = parse_fc2cmadb_html(article_html, base_url=base_url, number=number)
     if html_info is not None:
+        page_data = extract_fc2cmadb_inertia_page(article_html)
+        if not get_actors(html_info) and has_inertia_deferred_prop(page_data, "actresses"):
+            deferred_props, _ = await fetch_fc2cmadb_deferred_props(
+                async_client,
+                article_url=article_url,
+                page_data=page_data or {},
+                prop_name="actresses",
+                cookies=cookies,
+                use_proxy=use_proxy,
+            )
+            merge_fc2cmadb_deferred_props(html_info, deferred_props)
         return html_info, ""
 
     return await fetch_article_info(
@@ -366,10 +476,11 @@ class Fc2ppvdbCrawler(BaseCrawler):
         if "http" not in cover_url:
             ctx.debug("数据获取失败: 未获取到cover！")
         release_date = get_release_date(html_info)
-        actors = get_actors(html_info)
+        site_actors = get_actors(html_info)
+        actors = site_actors
         tags = [tag for tag in get_tags(html_info) if tag != "無修正"]
         studio = get_studio(html_info)  # 使用卖家作为厂商
-        if FieldRule.FC2_SELLER in manager.config.fields_rule and studio:
+        if FieldRule.FC2_SELLER in manager.config.fields_rule and not actors and studio:
             actors = [studio]
         video_type = get_video_type(html_info)
 
@@ -379,6 +490,7 @@ class Fc2ppvdbCrawler(BaseCrawler):
             originaltitle=title,
             outline="",
             actors=actors,
+            all_actors=site_actors or actors,
             originalplot="",
             tags=tags,
             release=release_date,
