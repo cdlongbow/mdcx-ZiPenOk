@@ -348,3 +348,13 @@ def test_amazon_fingerprint_pool_uses_desktop_profiles():
 
     assert any(each.startswith("chrome") for each in seen)
     assert any(each.startswith("firefox") for each in seen)
+
+
+def test_madouqu_fingerprint_pool_uses_cloudflare_compatible_profiles():
+    seen = {network_fingerprint.select_fingerprint("madouqu.com").fingerprint_id for _ in range(20)}
+
+    assert seen <= {"chrome136_win", "firefox133_win"}
+    assert (
+        network_fingerprint.select_fingerprint("www.madouqu.com", exclude_fingerprint_id="chrome136_win").fingerprint_id
+        == "firefox133_win"
+    )
