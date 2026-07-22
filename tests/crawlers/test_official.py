@@ -52,6 +52,10 @@ class FakeMappedOfficialClient:
             return _faleno_search_html(), ""
         if url == "https://faleno.jp/top/works/fns216/":
             return _faleno_detail_html(), ""
+        if url == "https://faleno.jp/top/?s=jimmy 003":
+            return _faleno_search_html("jimmy003"), ""
+        if url == "https://faleno.jp/top/works/jimmy003/":
+            return _faleno_detail_html("jimmy003"), ""
         if url == "https://dahlia-av.jp/works/dldss517/":
             return _dahlia_detail_html(), ""
         return None, f"unexpected url: {url}"
@@ -79,19 +83,19 @@ def _detail_html() -> str:
     """
 
 
-def _faleno_search_html() -> str:
-    return """
+def _faleno_search_html(number: str = "fns216") -> str:
+    return f"""
     <html><body>
       <div class="text_name">
-        <a href="https://faleno.jp/top/works/fns216/">FNS-216</a>
+        <a href="https://faleno.jp/top/works/{number}/">{number.upper()}</a>
       </div>
-      <a><img src="https://example.test/fns216-search.jpg"></a>
+      <a><img src="https://example.test/{number}-search.jpg"></a>
     </body></html>
     """
 
 
-def _faleno_detail_html() -> str:
-    return """
+def _faleno_detail_html(number: str = "fns216") -> str:
+    return f"""
     <html><body>
       <h1>Faleno Official Title Actor F</h1>
       <div class="box_works01_text"><p>Faleno outline</p></div>
@@ -103,10 +107,10 @@ def _faleno_detail_html() -> str:
           <li class="clearfix"><span>銉°兗銈兗</span><p>FALENO</p></li>
         </ul>
       </div>
-      <a class="pop_sample" href="https://example.test/fns216.mp4">
-        <img src="https://example.test/fns216_1200.jpg?output-quality=60">
+      <a class="pop_sample" href="https://example.test/{number}.mp4">
+        <img src="https://example.test/{number}_1200.jpg?output-quality=60">
       </a>
-      <a class="pop_img" href="https://example.test/fns216-extra.jpg"></a>
+      <a class="pop_img" href="https://example.test/{number}-extra.jpg"></a>
       <a class="genre">Drama</a>
     </body></html>
     """
@@ -272,6 +276,7 @@ async def test_official_crawler_uses_prefix_mapping_and_dynamic_source():
     ("number", "expected_source", "expected_detail_url", "expected_title"),
     [
         ("FNS-216", "faleno", "https://faleno.jp/top/works/fns216/", "Faleno Official Title Actor F"),
+        ("JIMMY-003", "faleno", "https://faleno.jp/top/works/jimmy003/", "Faleno Official Title Actor F"),
         ("DLDSS-517", "dahlia", "https://dahlia-av.jp/works/dldss517/", "Dahlia Official Title Actor D"),
     ],
 )

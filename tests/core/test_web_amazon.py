@@ -190,6 +190,48 @@ async def test_poster_auto_best_uses_original_dmm_poster_size(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
+async def test_poster_auto_best_crops_landscape_candidate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    async def fake_get_big_poster(*args, **kwargs):
+        return None
+
+    async def fake_get_image_size(url: str, media_context=None):
+        assert url == "https://example.test/landscape.jpg"
+        return 840, 568
+
+    async def fake_download_file_with_filepath(*args, **kwargs):
+        raise AssertionError("有可用裁剪源时不应直下横图 Poster")
+
+    monkeypatch.setattr(
+        manager.config,
+        "download_files",
+        [DownloadableFile.POSTER, DownloadableFile.THUMB, DownloadableFile.POSTER_AUTO_BEST],
+    )
+    monkeypatch.setattr(manager.config, "download_hd_pics", [])
+    monkeypatch.setattr(manager.config, "keep_files", [])
+    monkeypatch.setattr("mdcx.core.web._get_big_poster", fake_get_big_poster)
+    monkeypatch.setattr("mdcx.core.web._get_image_size", fake_get_image_size)
+    monkeypatch.setattr("mdcx.core.web.download_file_with_filepath", fake_download_file_with_filepath)
+
+    thumb_path = tmp_path / "thumb.jpg"
+    _save_test_image(thumb_path, (840, 568))
+
+    result = CrawlersResult.empty()
+    result.number = "ABF-371"
+    result.scraping_type = FixedScrapingType.YOUMA
+    result.poster = "https://example.test/landscape.jpg"
+    result.poster_from = "javdbapi"
+    result.image_download = True
+    other = OtherInfo.empty()
+    other.thumb_path = thumb_path
+
+    poster_path = tmp_path / "poster.jpg"
+    assert await poster_download(result, other, "", tmp_path, poster_path) is True
+    assert result.poster_from == "thumb right"
+    with Image.open(poster_path) as image:
+        assert image.width < image.height
+
+
+@pytest.mark.asyncio
 async def test_youma_without_auto_best_direct_downloads_poster_when_it_beats_crop(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
